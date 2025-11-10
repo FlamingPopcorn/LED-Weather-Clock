@@ -7,5 +7,5 @@ A clock designed to use a WS2812B LED matrix and a Pi Pico. This program uses th
 
 # Flashing the Pi Pico
 1. Install micropython onto your pico with the latest official release
-2. Upload the two files to your pico with an IDE like Thonny or VSCode with the MicroPico Extension
+2. Upload the project files to your pico with an IDE like Thonny or VSCode with the MicroPico Extension
 3. Unplug the pico and power it again. It should be running the program
