@@ -58,8 +58,8 @@ host = "pool.ntp.org"
 
 # Weather settings - API Docs: https://openweathermap.org/api
 weather_api_key = ""
-# zip_code = 22030
-# country_code = "US"
+# zip_code = 
+# country_code = ""
 # get_location_url = f"http://api.openweathermap.org/geo/1.0/zip?zip={zip_code},{country_code}&appid={weather_api_key}"
 
 lat = 
@@ -404,4 +404,5 @@ while(True):
     
     # Debug print the current RTC time to serial console
     print(f"Current RTC time is: {t}")
+
     sleep(1)
