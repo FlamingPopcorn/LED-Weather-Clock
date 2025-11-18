@@ -1,4 +1,5 @@
-from neopixel import Neopixel
+from matrix import Matrix
+#from neopixel import Neopixel
 from time import localtime, sleep, gmtime, mktime
 from machine import Pin, RTC, Timer
 from requests import get
@@ -8,17 +9,19 @@ import socket
 import struct
 
 from bmp_to_array import bmp_to_array
+import draw
 
 ############################################################################
 #                              START CONFIG                                #
 ############################################################################
 
 # Number of LED Pixels
-Length_pixels = 32
-Height_pixels = 8
-number_pixels = Length_pixels * Height_pixels
+Width_pixels = 32
+Height_pixels = 16
+height_per_panel = 8
+number_pixels = Width_pixels * Height_pixels
 
-# DIO Pin for LED Strip
+# DIO Pin for LED Matrix
 LED_PIN = 28
 
 # Day and Night times in 24 hour time
@@ -42,10 +45,10 @@ border_color = (160, 0, 255)
 
 # RTC object in the form of (year, month, day, weekday, hours, minutes, seconds, subseconds)
 # Note for weekday: Monday = 0 .. Sunday == 6
-startDay = 10
+startDay = 4
 startMonth = 11
 startYear = 2025
-weekday = 0
+weekday = 1
 
 # Wifi settings for ntp
 ssid = ""
@@ -53,7 +56,7 @@ password = ""
 maxRetryCount = 10
 
 # ntp settings
-timezone_offset = 
+timezone_offset = -5
 host = "pool.ntp.org"
 
 # Weather settings - API Docs: https://openweathermap.org/api
@@ -65,11 +68,12 @@ weather_api_key = ""
 lat = 
 lon = 
 
-get_weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={weather_api_key}"
+get_weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&units=imperial&appid={weather_api_key}"
 
 # Update Intervals in minutes
 brightness_update_interval = 5
 weather_update_interval = 10
+weekday_update_interval = 60
 
 # Update Intervals in hours
 RTC_resync_interval = 24
@@ -77,15 +81,6 @@ RTC_resync_interval = 24
 ############################################################################
 #                               END CONFIG                                 #
 ############################################################################
-
-# Translate regular 2D XY coords to the snake wiring coords
-def XY_to_snake(coordX, coordY):
-    if coordX % 2 == 0: # Even index rows are same as linear indexing
-        snakePos = coordX * Height_pixels + coordY
-    else: # Odd index rows are reversed due to Snake indexing
-        snakePos = coordX * Height_pixels + (Height_pixels - 1 - coordY)
-    # print(f"Debug: Snake Pos is = {snakePos}")
-    return snakePos
 
 # Translate 1D linear coords to the snake wiring coords
 def unsnake(pos):
@@ -96,13 +91,14 @@ def unsnake(pos):
 
 # Draw a border around the matrix
 def draw_border():
-    strip.set_pixel_line(0, Height_pixels - 1, border_color)
-    strip.set_pixel_line(number_pixels - 1 - Height_pixels, number_pixels - 1, border_color)
+    for pixel in range(0, Height_pixels):
+        matrix.set_pixel(0, pixel, border_color)
+        matrix.set_pixel(Width_pixels - 1, pixel, border_color) 
 
-    for pixel in range(1,Length_pixels - 1):
-        strip.set_pixel(XY_to_snake(pixel, 0), border_color)
-        strip.set_pixel(XY_to_snake(pixel, Height_pixels - 1), border_color)
-    strip.show()
+    for pixel in range(1, Width_pixels - 1):
+        matrix.set_pixel(pixel, 0, border_color)
+        matrix.set_pixel(pixel, Height_pixels - 1, border_color)
+    matrix.show()
 
 # Convert int to array of individual digits
 def get_digits_string(number):
@@ -111,115 +107,17 @@ def get_digits_string(number):
         num_str = "0" + num_str
     return [str(digit) for digit in num_str]
 
-# Draw Numbers in a 3 x 5 rectangle
-#   0  1  2
-#   3  4  5
-#   6  7  8
-#   9  10 11
-#   12 13 14
-def draw_number(coordX, coordY, num, strip):
-    if (num == '0'):
-        for pixel in range(0,15):
-            if pixel in [0,1,2,3,5,6,8,9,11,12,13,14]:
-                strip.set_pixel(XY_to_snake((coordX + pixel % 3),(coordY + pixel // 3)), time_color)
-            else:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), off)
-
-    elif (num == '1'):
-        for pixel in range(0,15):
-            if pixel in [2,5,8,11,14]:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), time_color)
-            else:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), off)
-
-    elif (num == '2'):
-        for pixel in range(0,15):
-            if pixel in [0,1,2,5,6,7,8,9,12,13,14]:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), time_color)
-            else:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), off)
-
-    elif (num == '3'):
-        for pixel in range(0,15):
-            if pixel in [0,1,2,5,6,7,8,11,12,13,14]:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), time_color)
-            else:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), off)
-
-    elif (num == '4'):
-        for pixel in range(0,15):
-            if pixel in [0,2,3,5,6,7,8,11,14]:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), time_color)
-            else:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), off)
-
-    elif (num == '5'):
-        for pixel in range(0,15):
-            if pixel in [0,1,2,3,6,7,8,11,12,13,14]:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), time_color)
-            else:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), off)
-
-    elif (num == '6'):
-        for pixel in range(0,15):
-            if pixel in [0,1,2,3,6,7,8,9,11,12,13,14]:
-                strip.set_pixel(XY_to_snake((coordX + pixel % 3),(coordY + pixel // 3)), time_color)
-            else:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), off)
-
-    elif (num == '7'):
-        for pixel in range(0,15):
-            if pixel in [0,1,2,5,8,11,14]:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), time_color)
-            else:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), off)
-
-    elif (num == '8'):
-        for pixel in range(0,15):
-            if pixel in [0,1,2,3,5,6,7,8,9,11,12,13,14]:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), time_color)
-            else:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), off)
-
-    elif (num == '9'):
-        for pixel in range(0,15):
-            if pixel in [0,1,2,3,5,6,7,8,11,12,13,14]:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), time_color)
-            else:
-                strip.set_pixel(XY_to_snake(coordX + pixel % 3,coordY + pixel // 3), off)
-
-# Draw the time from a corner and datetime object
-def draw_time(coordX, coordY, t, strip):
-    # 12 Hour Time
-    if t[3] > 12:
-        hours = get_digits_string(t[3] % 12)
-    elif  t[3] == 0:
-        hours = get_digits_string(12)
-    else:
-        hours = get_digits_string(t[3])
-    minutes = get_digits_string(t[4])
-    
-    draw_number(coordX, coordY, hours[0], strip)
-    draw_number(coordX + 4, coordY, hours[1], strip)
-
-    # Draw Colon Time Seperator
-    strip.set_pixel(XY_to_snake(coordX + 8, coordY + 1), time_color)
-    strip.set_pixel(XY_to_snake(coordX + 8, coordY + 3), time_color)
-
-    draw_number(coordX + 10, coordY, minutes[0], strip)
-    draw_number(coordX + 14, coordY, minutes[1], strip)
-
-    strip.show()
+# Draw everything else
 
 # Sets brightness to set night time brightness
 def nightTime():
-    strip.brightness(brightness_night)
-    strip.show()
+    matrix.brightness(brightness_night)
+    matrix.show()
 
 # Sets brightness to set day time brightness
 def dayTime():
-    strip.brightness(brightness_day)
-    strip.show()
+    matrix.brightness(brightness_day)
+    matrix.show()
 
 # Connect to WLAN
 def connect():
@@ -260,77 +158,7 @@ def get_weather():
     weather = get(get_weather_url)
     return weather
 
-# Draw weather icons at specified XY coord
-def draw_weather(coordX, coordY, weather):
-    print(f"The current weather is: {weather}")
-
-    # Specific conditions
-    if weather["description"] == "few clouds":
-        if (weather["icon"][2] == 'd'):
-            pixel_array = bmp_to_array("few_clouds.bmp")
-            for pixel in range(len(pixel_array[0])):
-                strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-        else:
-            # print("drawing night few clouds")
-            pixel_array = bmp_to_array("few_clouds_night.bmp")
-            for pixel in range(len(pixel_array[0])):
-                strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-
-    elif weather["description"] == "broken clouds":
-        if (weather["icon"][2] == 'd'):
-            pixel_array = bmp_to_array("broken_clouds.bmp")
-            for pixel in range(len(pixel_array[0])):
-                strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-        else:
-            # print("drawing night few clouds")
-            pixel_array = bmp_to_array("broken_clouds.bmp")
-            for pixel in range(len(pixel_array[0])):
-                strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-
-    # Main Generic conditions
-    elif weather["main"] == "Clouds":
-        pixel_array = bmp_to_array("cloudy.bmp")
-        for pixel in range(len(pixel_array[0])):
-            strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-
-    elif weather["main"] == "Clear":
-        if (weather["icon"][2] == 'd'):
-            pixel_array = bmp_to_array("clear.bmp")
-            for pixel in range(len(pixel_array[0])):
-                strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-        else:
-            pixel_array = bmp_to_array("clear_night.bmp")
-            for pixel in range(len(pixel_array[0])):
-                strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-
-    elif weather["main"] == "Rain":
-        pixel_array = bmp_to_array("rainy.bmp")
-        for pixel in range(len(pixel_array[0])):
-            strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-
-    elif weather["main"] == "Thunderstorm":
-        pixel_array = bmp_to_array("thunderstorm.bmp")
-        for pixel in range(len(pixel_array[0])):
-            strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-    
-    elif weather["main"] == "Snow":
-        pixel_array = bmp_to_array("snow.bmp")
-        for pixel in range(len(pixel_array[0])):
-            strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-
-    elif weather["main"] == "Mist":
-        pixel_array = bmp_to_array("mist.bmp")
-        for pixel in range(len(pixel_array[0])):
-            strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-
-    elif weather["main"] == "Haze":
-        pixel_array = bmp_to_array("haze.bmp")
-        for pixel in range(len(pixel_array[0])):
-            strip.set_pixel(XY_to_snake(coordX + pixel % pixel_array[2], coordY + pixel // pixel_array[1]), pixel_array[0][pixel])
-
-    else:
-        print(f"condition not declared: {weather}")
-    strip.show()
+# Draw Weather and temp
 
 # RTC sync interupt handler
 def resync_RTC(_):
@@ -343,7 +171,8 @@ def resync_RTC(_):
 # Weather update interupt handler
 def update_weather(_):
     current_weather = get_weather()
-    draw_weather(25, 1, current_weather.json()["weather"][0])
+    draw.draw_weather(25, 1, current_weather.json()["weather"][0], matrix)
+    draw.draw_temp(23,9, current_weather.json()["main"]["temp"], matrix)
 
 # Brightness update interupt handler
 def update_brightness(_):
@@ -353,6 +182,11 @@ def update_brightness(_):
     else:
         dayTime()
     draw_border()
+
+# Weekday update interupt handle
+def update_weekday(_):
+    t = localtime()
+    draw.draw_weekday(20, 2, t[6], matrix)
 
 ############################################################################
 #                        Main Setup Code and Loop                          #
@@ -364,12 +198,12 @@ NTP_DELTA = 2208988800 - 3600 * timezone_offset
 # setup Pico W LED Pin
 led = Pin("LED", Pin.OUT)
 
-# Declare LED Strip Object
-strip = Neopixel(number_pixels, 0, LED_PIN, "GRB")
+# Declare LED Matrix Object
+matrix = Matrix(Height_pixels, Width_pixels, height_per_panel, LED_PIN)
 
-# Blank strip at the beginning
-strip.set_pixel_line(0,number_pixels - 1, off)
-strip.show()
+# Blank matrix at the beginning
+matrix.fill(off)
+matrix.show()
 
 # Connects to wifi is ssid is set or else uses hardcoded time
 if (ssid != ""):
@@ -389,10 +223,12 @@ else:
 soft_timer1 = Timer(mode=Timer.PERIODIC, period=1000 * 60 * brightness_update_interval, callback=update_brightness)
 soft_timer2 = Timer(mode=Timer.PERIODIC, period=1000 * 60 * weather_update_interval, callback=update_weather)
 soft_timer3 = Timer(mode=Timer.PERIODIC, period=1000 * 60 * 60 * RTC_resync_interval, callback=resync_RTC)
+soft_timer4 = Timer(mode=Timer.PERIODIC, period=1000 * 60 * weekday_update_interval, callback=update_weekday)
 
 # Run initial update after timers are setup
 update_brightness(None)
 update_weather(None)
+update_weekday(None)
 
 ## Main Loop ##    
 while(True):
@@ -400,9 +236,8 @@ while(True):
     t = localtime()
 
     # Draw clock time
-    draw_time(1,1,t,strip)
+    draw.draw_time(2,2,t, matrix)
     
     # Debug print the current RTC time to serial console
     print(f"Current RTC time is: {t}")
-
     sleep(1)

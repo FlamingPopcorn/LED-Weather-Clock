@@ -1,17 +1,19 @@
-def bmp_to_array(filename: str):
+def bmp_to_array(filename: str, PrintBMPInfo=0):
     bmp = open(filename, "rb")
 
     bmp.seek(10)
     bmp_start_offset = int.from_bytes(bytearray(bmp.read(4)), 'little')
-    #print(bmp_start_offset)
 
     bmp.seek(18)
     bmp_width = int.from_bytes(bytearray(bmp.read(4)), 'little')
-    #print(bmp_width)
 
     bmp.seek(22)
     bmp_height = int.from_bytes(bytearray(bmp.read(4)), 'little')
-    #print(bmp_height)
+
+    if (PrintBMPInfo):
+        print(f"BMP Start Offset: {bmp_start_offset}")
+        print(f"BMP Width: {bmp_width}")
+        print(f"BMP Height: {bmp_height}")
 
     bmp.seek(bmp_start_offset)
 
@@ -21,6 +23,7 @@ def bmp_to_array(filename: str):
         g = int.from_bytes(bmp.read(1))
         r = int.from_bytes(bmp.read(1))
 
+        # I think could do -pixel to index backwards. Potentially need to just do rows backwards
         if ((r, g, b) == (255, 255, 255)):
             bmp_array[pixel] = (0,0,0)
         else:
