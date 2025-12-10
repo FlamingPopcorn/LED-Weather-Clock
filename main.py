@@ -3,13 +3,14 @@ from matrix import Matrix
 from time import localtime, sleep, gmtime, mktime
 from machine import Pin, RTC, Timer
 from requests import get
+import _thread
 
 import network
 import socket
 import struct
 
-from bmp_to_array import bmp_to_array
 import draw
+import web_config
 
 ############################################################################
 #                              START CONFIG                                #
@@ -229,6 +230,9 @@ soft_timer4 = Timer(mode=Timer.PERIODIC, period=1000 * 60 * weekday_update_inter
 update_brightness(None)
 update_weather(None)
 update_weekday(None)
+
+# Start web configuration server in separate thread 
+_thread.start_new_thread(web_config, ())
 
 ## Main Loop ##    
 while(True):
